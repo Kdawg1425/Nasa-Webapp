@@ -1,3 +1,4 @@
+
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from flask_session import Session
 import sqlite3
@@ -41,7 +42,8 @@ def init_qdb():
                 name TEXT NOT NULL,
                 filesystem TEXT NOT NULL,
                 ticket_number TEXT NOT NULL,
-                quota_request TEXT NOT NULL,
+                soft_quota TEXT NOT NULL,
+                hard_quota TEXT NOT NULL,
                 status TEXT DEFAULT 'permanent',
                 expiration_date TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -50,17 +52,6 @@ def init_qdb():
         print("Database initialized!")
 
 init_qdb()
-
-def search_quota_requests(name_query):
-    """Return all quota requests that match the given name."""
-    with sqlite3.connect(QUOTA_DB) as conn:
-        cursor = conn.execute("""
-            SELECT name, filesystem, ticket_number, quota_request, created_at
-            FROM quota_requests
-            WHERE name LIKE ?
-            ORDER BY created_at DESC
-        """, (f"%{name_query}%",))
-        return cursor.fetchall()
 
 # --- Helper functions ---
 def get_user(username):
@@ -73,6 +64,17 @@ def add_user(username, password_hash):
         conn.execute("INSERT INTO users (username, password) VALUES (?, ?)",
                      (username, password_hash))
         conn.commit()
+
+def search_quota_requests(name_query):
+    """Return all quota requests that match the given name."""
+    with sqlite3.connect(QUOTA_DB) as conn:
+        cursor = conn.execute("""
+            SELECT name, filesystem, ticket_number, soft_quota, hard_quota, status, expiration_date, created_at
+            FROM quota_requests
+            WHERE name LIKE ?
+            ORDER BY created_at DESC
+        """, (f"%{name_query}%",))
+        return cursor.fetchall()
 
 # --- Routes ---
 @app.route('/')
@@ -148,24 +150,42 @@ def add_quota():
     name = request.form['name']
     filesystem = request.form['filesystem']
     ticket_number = request.form['ticket_number']
-    quota_request = request.form['quota_request']
+    soft_quota = request.form['soft_quota']
+    hard_quota = request.form['hard_quota']
     status = request.form['status']
-    expiration_date = request.form.get('expiration_date') or None  # Can be blank
+    expiration_date = None if status == 'permanent' else request.form.get('expiration_date')
+
+    if status == 'temporary' and not expiration_date:
+        flash("Expiration date is required for temporary quotas.", "error")
+        return redirect(url_for('index'))
+
+    if status == 'permanent':
+        expiration_date = None
 
     with sqlite3.connect(QUOTA_DB) as conn:
         conn.execute("""
-            INSERT INTO quota_requests (name, filesystem, ticket_number, quota_request, status, expiration_date)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (name, filesystem, ticket_number, quota_request, status, expiration_date))
-
+            INSERT INTO quota_requests (name, filesystem, ticket_number, soft_quota, hard_quota, status, expiration_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (name, filesystem, ticket_number, soft_quota, hard_quota, status, expiration_date))
+    
+    flash("Quota request added successfully!", "success")
     return redirect(url_for('index'))
+
+@app.route('/toggle_expiration')
+def toggle_expiration():
+    status = request.args.get('status')
+    if status == 'temporary':
+        return render_template('partials/expiration_input.html')  
+    else:
+        return ''
+
 
 if __name__ == '__main__':
     os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)
     app.run(host='127.0.0.1', port=5000, debug=True)
 
 '''
-🧪 Optional: Filter/Search by Status or Expiration Date
+Optional: Filter/Search by Status or Expiration Date
 
 You can now write queries like:
 
