@@ -17,7 +17,7 @@ Session(app)
 DB_NAME = "users.db"
 
 # --- Database Setup ---
-def init_db():
+def init_udb():
     if not os.path.exists(DB_NAME):
         with sqlite3.connect(DB_NAME) as conn:
             conn.execute("""
@@ -29,7 +29,38 @@ def init_db():
             """)
         print("Database initialized.")
 
-init_db()
+init_udb()
+
+QUOTA_DB = "quotas.db"
+
+def init_qdb():
+    with sqlite3.connect(QUOTA_DB) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS quota_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                filesystem TEXT NOT NULL,
+                ticket_number TEXT NOT NULL,
+                quota_request TEXT NOT NULL,
+                status TEXT DEFAULT 'permanent',
+                expiration_date TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        print("Database initialized!")
+
+init_qdb()
+
+def search_quota_requests(name_query):
+    """Return all quota requests that match the given name."""
+    with sqlite3.connect(QUOTA_DB) as conn:
+        cursor = conn.execute("""
+            SELECT name, filesystem, ticket_number, quota_request, created_at
+            FROM quota_requests
+            WHERE name LIKE ?
+            ORDER BY created_at DESC
+        """, (f"%{name_query}%",))
+        return cursor.fetchall()
 
 # --- Helper functions ---
 def get_user(username):
@@ -98,6 +129,49 @@ def index():
         return redirect(url_for('login'))
     return render_template('dashboard.html', username=session['user'])
 
+@app.route('/search', methods=['POST'])
+def search():
+    if 'user' not in session:
+        flash("Please log in first.")
+        return redirect(url_for('login'))
+
+    name_query = request.form.get('search_name', '').strip()
+    if not name_query:
+        flash("Please enter a name to search.")
+        return redirect(url_for('index'))
+
+    results = search_quota_requests(name_query)
+    return render_template('dashboard.html', username=session['user'], results=results, searched_name=name_query)
+
+@app.route('/add_quota', methods=['POST'])
+def add_quota():
+    name = request.form['name']
+    filesystem = request.form['filesystem']
+    ticket_number = request.form['ticket_number']
+    quota_request = request.form['quota_request']
+    status = request.form['status']
+    expiration_date = request.form.get('expiration_date') or None  # Can be blank
+
+    with sqlite3.connect(QUOTA_DB) as conn:
+        conn.execute("""
+            INSERT INTO quota_requests (name, filesystem, ticket_number, quota_request, status, expiration_date)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (name, filesystem, ticket_number, quota_request, status, expiration_date))
+
+    return redirect(url_for('index'))
+
 if __name__ == '__main__':
     os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)
     app.run(host='127.0.0.1', port=5000, debug=True)
+
+'''
+🧪 Optional: Filter/Search by Status or Expiration Date
+
+You can now write queries like:
+
+SELECT * FROM quota_requests
+WHERE status = 'temporary' AND expiration_date < DATE('now');
+
+
+This would find expired temporary quotas — useful for cleanup tools or alerts.
+'''
