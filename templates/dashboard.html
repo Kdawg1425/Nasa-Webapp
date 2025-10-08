@@ -1,11 +1,66 @@
 {% extends "base.html" %}
 {% block content %}
+
+<!-- Top Banner -->
 <div class="topcenter-container">
     <h2>Welcome, {{ username }}!</h2>
     <p>You are logged in. This is your workstation dashboard.</p>
 </div>
-<div class="dashboard-container">
-    <h2>Welcome, {{ username }}!</h2>
-    <p>You are logged in. This is your workstation dashboard.</p>
+
+<!-- Search bar -->
+<div class="search-container">
+    <form method="POST" action="{{ url_for('search') }}">
+        <input type="text" name="search_name" placeholder="Search by name..." required>
+        <button type="submit">Search</button>
+    </form>
+</div>
+
+<!-- Add Quota Request Form -->
+<div class="add-form">
+    <form method="POST" action="{{ url_for('add_quota') }}">
+        <input type="text" name="name" placeholder="Name" required>
+        <input type="text" name="filesystem" placeholder="Filesystem" required>
+        <input type="text" name="ticket_number" placeholder="Ticket Number" required>
+        <input type="text" name="quota_request" placeholder="Quota Request (e.g. 500GB)" required>
+        <select name="status" required>
+        <option value="permanent">Permanent</option>
+        <option value="temporary">Temporary</option>
+        </select>
+        <input type="date" name="expiration_date" placeholder="Expiration Date (optional)">
+        <button type="submit">Add Quota Request</button>
+    </form>
+</div>
+
+<!-- Dashboard -->
+<div>
+
+    <button>click me </button>
+    <div class="dashboard-container">
+        {% if results %}
+            <h3>Quota Requests for "{{ searched_name }}"</h3>
+            <table>
+                <tr>
+                    <th>Name</th>
+                    <th>Filesystem</th>
+                    <th>Ticket #</th>
+                    <th>Quota Request</th>
+                    <th>Date</th>
+                </tr>
+                {% for r in results %}
+                <tr>
+                    <td>{{ r[0] }}</td>
+                    <td>{{ r[1] }}</td>
+                    <td>{{ r[2] }}</td>
+                    <td>{{ r[3] }}</td>
+                    <td>{{ r[4] }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        {% elif searched_name %}
+            <p>No results found for "{{ searched_name }}".</p>
+        {% else %}
+            <p>Search for a name to view quota request history.</p>
+        {% endif %}
+    </div>
 </div>
 {% endblock %}
