@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title if title else "Workstation WebApp" }}</title>
+    <script src="https://unpkg.com/htmx.org@2.0.2"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="navbar">
+        <h1 class="app-name">Workstation WebApp</h1>
+        <div class="nav-buttons">
+            {% if 'user' in session %}
+                <span class="user-label">Hello, {{ session['user'] }}</span>
+                <a href="{{ url_for('logout') }}" class="btn">Logout</a>
+            {% else %}
+                <a href="{{ url_for('login') }}" class="btn">Login</a>
+                <a href="{{ url_for('signup') }}" class="btn">Sign Up</a>
+            {% endif %}
+        </div>
+    </header>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash-messages">
+          {% for message in messages %}
+            <p>{{ message }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>
