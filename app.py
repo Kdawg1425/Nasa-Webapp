@@ -1,9 +1,12 @@
 
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, render_template, request, redirect, url_for, session, flash, render_template_string
 from flask_session import Session
 import sqlite3
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
+import time
+import random
+from functools import wraps
 
 app = Flask(__name__)
 app.secret_key = "supersecretkey"  # Replace with an environment variable in production
@@ -54,27 +57,71 @@ def init_qdb():
 init_qdb()
 
 # --- Helper functions ---
+
+def get_db_connection(db_path):
+    conn = sqlite3.connect(db_path, timeout=5.0, isolation_level=None)  # Enables autocommit-like behavior
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA busy_timeout = 5000;")  # Wait up to 5 seconds for lock
+    return conn
+
+def with_retry(max_attempts=5, base_delay=0.1, max_delay=1.0):
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            attempts = 0
+            while True:
+                try:
+                    return fn(*args, **kwargs)
+                except sqlite3.OperationalError as e:
+                    if "database is locked" in str(e).lower():
+                        attempts += 1
+                        if attempts >= max_attempts:
+                            raise  # Re-raise after max attempts
+                        delay = min(max_delay, base_delay * (2 ** (attempts - 1)))
+                        jitter = random.uniform(0, delay)
+                        time.sleep(jitter)
+                    else:
+                        raise  # Not a locking error
+        return wrapper
+    return decorator
+
 def get_user(username):
-    with sqlite3.connect(DB_NAME) as conn:
+    with get_db_connection(DB_NAME) as conn:
         cursor = conn.execute("SELECT * FROM users WHERE username=?", (username,))
         return cursor.fetchone()
 
+@with_retry()
 def add_user(username, password_hash):
-    with sqlite3.connect(DB_NAME) as conn:
-        conn.execute("INSERT INTO users (username, password) VALUES (?, ?)",
-                     (username, password_hash))
+    with get_db_connection(DB_NAME) as conn:
+        conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password_hash))
         conn.commit()
 
-def search_quota_requests(name_query):
-    """Return all quota requests that match the given name."""
-    with sqlite3.connect(QUOTA_DB) as conn:
-        cursor = conn.execute("""
-            SELECT name, filesystem, ticket_number, soft_quota, hard_quota, status, expiration_date, created_at
-            FROM quota_requests
-            WHERE name LIKE ?
-            ORDER BY created_at DESC
-        """, (f"%{name_query}%",))
+def search_quota_requests(name_query, exact=False):
+    with get_db_connection(QUOTA_DB) as conn:
+        if exact:
+            cursor = conn.execute("""
+                SELECT id, name, filesystem, ticket_number, soft_quota, hard_quota, status, expiration_date, created_at
+                FROM quota_requests
+                WHERE name = ?
+                ORDER BY created_at DESC
+            """, (name_query,))
+        else:
+            cursor = conn.execute("""
+                SELECT id, name, filesystem, ticket_number, soft_quota, hard_quota, status, expiration_date, created_at
+                FROM quota_requests
+                WHERE name LIKE ?
+                ORDER BY created_at DESC
+            """, (f"%{name_query}%",))
         return cursor.fetchall()
+    
+@with_retry()
+def insert_quota_request(data):
+    with get_db_connection(QUOTA_DB) as conn:
+        conn.execute("""
+            INSERT INTO quota_requests (name, filesystem, ticket_number, soft_quota, hard_quota, status, expiration_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, data)
+
 
 # --- Routes ---
 @app.route('/')
@@ -162,14 +209,13 @@ def add_quota():
     if status == 'permanent':
         expiration_date = None
 
-    with sqlite3.connect(QUOTA_DB) as conn:
-        conn.execute("""
-            INSERT INTO quota_requests (name, filesystem, ticket_number, soft_quota, hard_quota, status, expiration_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (name, filesystem, ticket_number, soft_quota, hard_quota, status, expiration_date))
-    
+    data = (name, filesystem, ticket_number, soft_quota, hard_quota, status, expiration_date)
+    insert_quota_request(data)
+
+    results = search_quota_requests(name)
+
     flash("Quota request added successfully!", "success")
-    return redirect(url_for('index'))
+    return render_template('dashboard.html', username=session['user'], results=results, searched_name=name)
 
 @app.route('/toggle_expiration')
 def toggle_expiration():
@@ -178,6 +224,30 @@ def toggle_expiration():
         return render_template('partials/expiration_input.html')  
     else:
         return ''
+    
+@app.route('/quota_list/<name>')
+def quota_list(name):
+    results = search_quota_requests(name, exact=True)
+    return render_template('partials/quota_table.html', results=results, searched_name=name)
+    
+@app.route('/delete_quota/<int:quota_id>', methods=['POST'])
+def delete_quota(quota_id):
+    if 'user' not in session:
+        return "Unauthorized", 403
+
+    # Get name for filtering after deletion
+    with get_db_connection(QUOTA_DB) as conn:
+        row = conn.execute("SELECT name FROM quota_requests WHERE id = ?", (quota_id,)).fetchone()
+        if not row:
+            return "Quota not found", 404
+        name = row[0]
+        conn.execute("DELETE FROM quota_requests WHERE id = ?", (quota_id,))
+
+    # Search remaining entries for that name
+    results = search_quota_requests(name, exact=True)
+
+    # Return partial HTML for HTMX
+    return render_template("partials/quota_table.html", results=results, searched_name=name)
 
 
 if __name__ == '__main__':
