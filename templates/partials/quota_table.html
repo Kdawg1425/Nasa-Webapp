@@ -1,0 +1,42 @@
+{% if results %}
+    <h3>Quota Requests for "{{ searched_name }}"</h3>
+    <table>
+        <tr>
+            <th>Name</th>
+            <th>Filesystem</th>
+            <th>Ticket #</th>
+            <th>Soft Quota</th>
+            <th>Hard Quota</th>
+            <th>Status</th>
+            <th>Expiration Date</th>
+            <th>Date Created</th>
+            <th>Delete</th>
+        </tr>
+        {% for r in results %}
+        <tr>
+            <td>{{ r[1] }}</td>
+            <td>{{ r[2] }}</td>
+            <td>{{ r[3] }}</td>
+            <td>{{ r[4] }}</td>
+            <td>{{ r[5] }}</td>
+            <td>{{ r[6] }}</td>
+            <td>{{ r[7] }}</td>
+            <td>{{ r[8] }}</td>
+            <td>
+                <form method="POST"
+                      action="{{ url_for('delete_quota', quota_id=r[0]) }}"
+                      hx-post="{{ url_for('delete_quota', quota_id=r[0]) }}"
+                      hx-target="#quota-table"
+                      hx-swap="outerHTML"
+                      onsubmit="return confirm('Delete this quota?');">
+                    <button type="submit" style="background: none; border: none; cursor: pointer;">
+                        🗑️
+                    </button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+{% else %}
+    <p>No quota entries found for "{{ searched_name }}".</p>
+{% endif %}
