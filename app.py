@@ -178,6 +178,14 @@ def index():
         return redirect(url_for('login'))
     return render_template('dashboard.html', username=session['user'])
 
+@app.route('/dashboard')
+def dashboard():
+    return render_template('dashboard.html')
+
+@app.route('/archive')
+def archive():
+    return render_template('archive.html')
+
 @app.route('/search', methods=['POST'])
 def search():
     if 'user' not in session:
@@ -265,3 +273,4 @@ WHERE status = 'temporary' AND expiration_date < DATE('now');
 
 This would find expired temporary quotas — useful for cleanup tools or alerts.
 '''
+
