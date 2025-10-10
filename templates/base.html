@@ -8,15 +8,16 @@
 </head>
 <body>
     <header class="navbar">
-        <h1 class="app-name">Workstation WebApp</h1>
-        <div class="nav-buttons">
-            {% if 'user' in session %}
-                <span class="user-label">Hello, {{ session['user'] }}</span>
-                <a href="{{ url_for('logout') }}" class="btn">Logout</a>
-            {% else %}
-                <a href="{{ url_for('login') }}" class="btn">Login</a>
-                <a href="{{ url_for('signup') }}" class="btn">Sign Up</a>
-            {% endif %}
+        <div class="nav-left">
+          <h1 class="app-name">
+            <a href="{{ url_for('index') }}">
+              Workstation WebApp
+            </a>
+          </h1>
+          <nav class="nav-tabs">
+            <a href="{{ url_for('dashboard') }}" class="nav-tab">Dashboard</a>
+            <a href="{{ url_for('archive') }}" class="nav-tab">Data Archive</a>
+          </nav>
         </div>
     </header>
 
@@ -34,4 +35,5 @@
         {% block content %}{% endblock %}
     </main>
 </body>
+
 </html>
