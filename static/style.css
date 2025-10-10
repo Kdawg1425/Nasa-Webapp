@@ -16,6 +16,30 @@ body {
     padding: 1em 2em;
 }
 
+.nav-left {
+    display: flex;
+    align-items: center;
+    gap: 2em;
+}
+
+.nav-tabs {
+    display: flex;
+    gap: 1em;
+}
+
+.nav-tab {
+    color: white;
+    text-decoration: none;
+    padding: 0.4em 0.8em;
+    border-radius: 5px;
+    background-color: #555;
+    transition: background-color 0.3s ease;
+}
+
+.nav-tab:hover {
+    background-color: #777;
+}
+
 .app-name {
     margin: 0;
     font-size: 1.5em;
@@ -161,3 +185,4 @@ button {
 button:hover {
     background-color: #45a049;
 }
+
